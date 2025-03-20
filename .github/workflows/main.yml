@@ -36,53 +36,77 @@ jobs:
 
       - name: Deploy and Monitor Services
         run: |
+          set +e  # Prevent script from exiting immediately on failure
           COMPOSE_PATH="docker_compose/intel/cpu/xeon/compose.yaml"
           MAX_RETRIES=5
-          RETRY_DELAY=20  # Wait 20s before checking health again
+          RETRY_DELAY=20  # Wait 20 seconds before retrying
           attempt=0
-
-          # Start the services
-          echo "Starting Docker Compose services..."
-          docker compose -f $COMPOSE_PATH down || true  # Ignore errors
-          docker compose -f $COMPOSE_PATH up -d
+          success=0
 
           while [ $attempt -lt $MAX_RETRIES ]; do
-            echo "Checking container health... Attempt #$((attempt+1))"
+            echo "🛠️ Starting Docker Compose (Attempt #$((attempt+1)))..."
+            docker compose -f $COMPOSE_PATH down || true
+            docker compose -f $COMPOSE_PATH up -d
 
-            # Get unhealthy containers
+            sleep $RETRY_DELAY  # Wait for services to stabilize
+
+            # Check for unhealthy containers
             UNHEALTHY_CONTAINERS=$(docker ps --filter "status=unhealthy" --format "{{.Names}}")
 
             if [ -z "$UNHEALTHY_CONTAINERS" ]; then
-              echo "✅ All containers are healthy! Proceeding..."
-              exit 0
+              echo "✅ All containers are healthy!"
+              success=1
+              break
             else
               echo "❌ Unhealthy containers detected: $UNHEALTHY_CONTAINERS"
               docker logs tgi-server || true  # Print logs for debugging
-
-              # Restart only unhealthy containers instead of bringing everything down
-              for container in $UNHEALTHY_CONTAINERS; do
-                echo "Restarting $container..."
-                docker restart $container
-              done
             fi
 
             attempt=$((attempt + 1))
-            echo "Waiting $RETRY_DELAY seconds before rechecking..."
+            echo "⏳ Retrying in $RETRY_DELAY seconds..."
             sleep $RETRY_DELAY
           done
 
-          echo "❌ ERROR: Services failed to stabilize after $MAX_RETRIES attempts."
-          exit 1  # Fail workflow if containers remain unhealthy
+          if [ $success -ne 1 ]; then
+            echo "❌ ERROR: Services failed after $MAX_RETRIES retries."
+            exit 1  # Only fail the workflow after all retries
+          fi
 
   test-document-summarization:
     needs: setup-and-deploy
     runs-on: ubuntu-latest
     steps:
-      - name: Test Text Summarization (English)
+      - name: Test Text Summarization
         run: |
-          curl -X POST http://${{ env.HOST_IP }}:8888/v1/docsum \
-               -H "Content-Type: application/json" \
-               -d '{"type": "text", "messages": "Text Embeddings Inference (TEI) is a toolkit for deploying and serving open source text embeddings and sequence classification models. TEI enables high-performance extraction for the most popular models, including FlagEmbedding, Ember, GTE and E5."}'
+          set +e  # Allow retrying on failure
+          MAX_RETRIES=3
+          RETRY_DELAY=10
+          attempt=0
+          success=0
+
+          while [ $attempt -lt $MAX_RETRIES ]; do
+            echo "📝 Running Summarization Test (Attempt #$((attempt+1)))..."
+            RESPONSE=$(curl -s -o response.json -w "%{http_code}" -X POST http://${{ env.HOST_IP }}:8888/v1/docsum \
+                        -H "Content-Type: application/json" \
+                        -d '{"type": "text", "messages": "Text Embeddings Inference is a toolkit for deploying open-source models."}')
+            
+            if [ "$RESPONSE" -eq 200 ]; then
+              echo "✅ Test passed!"
+              success=1
+              break
+            else
+              echo "⚠️ Test failed with HTTP status: $RESPONSE"
+            fi
+
+            attempt=$((attempt + 1))
+            echo "🔄 Retrying test in $RETRY_DELAY seconds..."
+            sleep $RETRY_DELAY
+          done
+
+          if [ $success -ne 1 ]; then
+            echo "❌ Test failed after $MAX_RETRIES retries."
+            exit 1
+          fi
 
       - name: Cleanup
         if: always()
