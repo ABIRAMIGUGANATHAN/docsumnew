@@ -24,8 +24,9 @@ jobs:
 
       - name: Deploy Using Docker
         run: |
-          cd docsumnew/docker_compose/intel/cpu/xeon/
-          docker compose -f compose.yaml up -d
+          COMPOSE_PATH="docker_compose/intel/cpu/xeon/compose.yaml"
+          docker compose -f $COMPOSE_PATH down  # Stop existing containers
+          docker compose -f $COMPOSE_PATH up -d
 
       - name: Wait for Service to Start
         run: sleep 30
