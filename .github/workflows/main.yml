@@ -1,48 +1,47 @@
-name: Deploy DocSum with Gaudi
+name: Document Summarization CI/CD
 
 on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
-  deploy:
+  setup-and-deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
-      - name: Set up Environment Variables
+      - name: Set Environment Variables
         run: |
           echo "HOST_IP=${{ secrets.HOST_IP }}" >> $GITHUB_ENV
           echo "NO_PROXY=${{ secrets.NO_PROXY }}" >> $GITHUB_ENV
           echo "HUGGINGFACEHUB_API_TOKEN=${{ secrets.HUGGINGFACEHUB_API_TOKEN }}" >> $GITHUB_ENV
 
-      - name: Print Current Directory
-        run: pwd
-
-      - name: Debug File Existence
-        run: ls -lah ./docker_compose/
-
-      - name: Debug Working Directory and File Paths
+      - name: Deploy Using Docker
         run: |
-          pwd
-          ls -R
-      - name: Set Environment from Script
-        run: |
-          chmod +x /home/runner/work/docsumnew/docsumnew/docker_compose/set_env.sh
-          . /home/runner/work/docsumnew/docsumnew/docker_compose/set_env.sh
-        shell: bash
-
-      - name: Deploy Containers
-        run: |
-          COMPOSE_PATH="docker_compose/intel/cpu/xeon/compose.yaml"
+          cd docsumnew/docker_compose/intel/cpu/xeon/
           docker compose -f compose.yaml up -d
 
-      - name: Test DocSum API
+      - name: Wait for Service to Start
+        run: sleep 30
+
+  test-document-summarization:
+    needs: setup-and-deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test Text Summarization (English)
         run: |
           curl -X POST http://${{ env.HOST_IP }}:8888/v1/docsum \
                -H "Content-Type: application/json" \
                -d '{"type": "text", "messages": "Text Embeddings Inference (TEI) is a toolkit for deploying and serving open source text embeddings and sequence classification models. TEI enables high-performance extraction for the most popular models, including FlagEmbedding, Ember, GTE and E5."}'
+
+      - name: Cleanup
+        if: always()
+        run: |
+          cd docsumnew/docker_compose/intel/cpu/xeon/
+          docker compose -f compose.yaml down
