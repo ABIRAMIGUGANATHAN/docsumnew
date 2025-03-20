@@ -22,12 +22,12 @@ jobs:
 
       - name: Set Environment from Script
         run: |
-          chmod +x GenAIExamples/DocSum/docker_compose/set_env.sh
-          source GenAIExamples/DocSum/docker_compose/set_env.sh
+          chmod +x docsum/docker_compose/set_env.sh
+          source docsum/docker_compose/set_env.sh
 
       - name: Deploy Containers
         run: |
-          cd GenAIExamples/DocSum/docker_compose/intel/hpu/gaudi/
+          cd docsum/docker_compose/intel/hpu/gaudi/
           docker compose -f compose.yaml up -d
 
       - name: Test DocSum API
