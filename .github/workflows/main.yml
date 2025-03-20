@@ -30,7 +30,7 @@ jobs:
 
       - name: Deploy Containers
         run: |
-          cd docsumnew/docker_compose/intel/hpu/gaudi/
+          COMPOSE_PATH="docker_compose/intel/cpu/xeon/compose.yaml"
           docker compose -f compose.yaml up -d
 
       - name: Test DocSum API
