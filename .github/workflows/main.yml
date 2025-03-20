@@ -34,15 +34,16 @@ jobs:
           echo "NO_PROXY=${{ secrets.NO_PROXY }}" >> $GITHUB_ENV
           echo "HUGGINGFACEHUB_API_TOKEN=${{ secrets.HUGGINGFACEHUB_API_TOKEN }}" >> $GITHUB_ENV
 
-      - name: Deploy Using Docker with Retry
+      - name: Deploy Using Docker with Double Retry
         run: |
           COMPOSE_PATH="docker_compose/intel/cpu/xeon/compose.yaml"
-          MAX_RETRIES=3
+          MAX_RETRIES=2
           RETRY_COUNT=0
+          SUCCESS=false
 
           while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
             echo "Attempt #$((RETRY_COUNT+1)) to start the containers"
-            
+
             docker compose -f $COMPOSE_PATH down  # Stop existing containers
             docker compose -f $COMPOSE_PATH up -d
             
@@ -50,16 +51,17 @@ jobs:
             sleep 30  # Allow time for services to start
             
             # Check if tgi-server is healthy
-            if docker ps | grep -q "tgi-server"; then
+            if docker ps --filter "name=tgi-server" --format "{{.Status}}" | grep -q "healthy"; then
               echo "tgi-server is running successfully."
+              SUCCESS=true
               break
             else
-              echo "tgi-server failed to start, retrying..."
+              echo "tgi-server is still unhealthy. Retrying..."
               ((RETRY_COUNT++))
             fi
           done
 
-          if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+          if [ "$SUCCESS" = false ]; then
             echo "tgi-server failed to start after $MAX_RETRIES attempts."
             exit 1
           fi
