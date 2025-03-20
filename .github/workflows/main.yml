@@ -34,37 +34,36 @@ jobs:
           echo "NO_PROXY=${{ secrets.NO_PROXY }}" >> $GITHUB_ENV
           echo "HUGGINGFACEHUB_API_TOKEN=${{ secrets.HUGGINGFACEHUB_API_TOKEN }}" >> $GITHUB_ENV
 
-      - name: Deploy Using Docker with Double Retry
+      - name: Deploy and Ensure Stability
         run: |
           COMPOSE_PATH="docker_compose/intel/cpu/xeon/compose.yaml"
-          MAX_RETRIES=2
-          RETRY_COUNT=0
-          SUCCESS=false
 
-          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            echo "Attempt #$((RETRY_COUNT+1)) to start the containers"
+          restart_count=0
+          max_retries=5  # Increase this if needed
 
-            docker compose -f $COMPOSE_PATH down  # Stop existing containers
+          while [ $restart_count -lt $max_retries ]; do
+            echo "Attempt #$((restart_count+1)): Bringing up containers"
+
+            docker compose -f $COMPOSE_PATH down || true  # Ignore errors on down
             docker compose -f $COMPOSE_PATH up -d
-            
-            echo "Waiting for containers to stabilize..."
-            sleep 30  # Allow time for services to start
-            
-            # Check if tgi-server is healthy
-            if docker ps --filter "name=tgi-server" --format "{{.Status}}" | grep -q "healthy"; then
-              echo "tgi-server is running successfully."
-              SUCCESS=true
-              break
+
+            echo "Waiting for services to stabilize..."
+            sleep 20  # Initial wait before health check
+
+            unhealthy_containers=$(docker ps --filter "status=unhealthy" --format "{{.Names}}")
+
+            if [ -z "$unhealthy_containers" ]; then
+              echo "All services started successfully!"
+              exit 0
             else
-              echo "tgi-server is still unhealthy. Retrying..."
-              ((RETRY_COUNT++))
+              echo "Some services are still unhealthy: $unhealthy_containers"
+              docker logs tgi-server || true  # Debug unhealthy container
+              ((restart_count++))
             fi
           done
 
-          if [ "$SUCCESS" = false ]; then
-            echo "tgi-server failed to start after $MAX_RETRIES attempts."
-            exit 1
-          fi
+          echo "ERROR: Services failed to stabilize after $max_retries attempts."
+          exit 1  # Fail workflow if containers remain unhealthy
 
   test-document-summarization:
     needs: setup-and-deploy
