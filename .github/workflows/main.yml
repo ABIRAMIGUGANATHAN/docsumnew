@@ -78,14 +78,14 @@ jobs:
     steps:
       - name: Test Text Summarization
         run: |
-          echo "HOST_IP is: ${{ env.HOST_IP }}"
+          echo "HOST_IP is: ${{ secrets.HOST_IP }}"
           
           # Wait until API is reachable
           echo "⏳ Waiting for API..."
           MAX_WAIT=60
           WAIT_INTERVAL=5
           elapsed=0
-          while ! curl --silent --fail http://${{ env.HOST_IP }}:8888/v1/docsum -o /dev/null; do
+          while ! curl --silent --fail http://${{ secrets.HOST_IP }}:8888/v1/docsum -o /dev/null; do
             echo "⏳ API not ready yet, waiting..."
             sleep $WAIT_INTERVAL
             elapsed=$((elapsed + WAIT_INTERVAL))
@@ -104,7 +104,7 @@ jobs:
       
           while [ $attempt -lt $MAX_RETRIES ]; do
             echo "📝 Running Summarization Test (Attempt #$((attempt+1)))..."
-            RESPONSE=$(curl -s -o response.json -w "%{http_code}" -X POST http://${{ env.HOST_IP }}:8888/v1/docsum \
+            RESPONSE=$(curl -s -o response.json -w "%{http_code}" -X POST http://${{ secrets.HOST_IP }}:8888/v1/docsum \
                         -H "Content-Type: application/json" \
                         -d '{"type": "text", "messages": "Text Embeddings Inference is a toolkit for deploying open-source models."}')
             
