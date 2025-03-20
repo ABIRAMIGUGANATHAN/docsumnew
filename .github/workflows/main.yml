@@ -76,53 +76,23 @@ jobs:
     needs: setup-and-deploy
     runs-on: ubuntu-latest
     steps:
+      - name: Debug Container Logs if API Fails
+        if: failure()
+        run: docker ps -a && docker logs $(docker ps -q)
+
       - name: Test Text Summarization
         run: |
           echo "HOST_IP is: ${{ secrets.HOST_IP }}"
           
-          # Wait until API is reachable
-          echo "⏳ Waiting for API..."
-          MAX_WAIT=60
-          WAIT_INTERVAL=5
-          elapsed=0
-          while ! curl --silent --fail http://${{ secrets.HOST_IP }}:8888/v1/docsum -o /dev/null; do
-            echo "⏳ API not ready yet, waiting..."
-            sleep $WAIT_INTERVAL
-            elapsed=$((elapsed + WAIT_INTERVAL))
-            if [ "$elapsed" -ge "$MAX_WAIT" ]; then
-              echo "❌ API failed to start after $MAX_WAIT seconds."
-              exit 1
-            fi
-          done
-          echo "✅ API is now reachable!"
-      
-          # Run test with retries
-          MAX_RETRIES=3
-          RETRY_DELAY=10
-          attempt=0
-          success=0
-      
-          while [ $attempt -lt $MAX_RETRIES ]; do
-            echo "📝 Running Summarization Test (Attempt #$((attempt+1)))..."
-            RESPONSE=$(curl -s -o response.json -w "%{http_code}" -X POST http://${{ secrets.HOST_IP }}:8888/v1/docsum \
-                        -H "Content-Type: application/json" \
-                        -d '{"type": "text", "messages": "Text Embeddings Inference is a toolkit for deploying open-source models."}')
-            
-            if [ "$RESPONSE" -eq 200 ]; then
+          HTTP_CODE=$(curl -s -o response.json -w "%{http_code}" -X POST http://${{ secrets.HOST_IP }}:8888/v1/docsum \
+           -H "Content-Type: application/json" \
+           -d '{"type": "text", "messages": "Text Embeddings Inference is a toolkit for deploying open-source models."}')
+
+          if [ "$HTTP_CODE" -eq 200 ]; then
               echo "✅ Test passed!"
               success=1
               break
-            else
-              echo "⚠️ Test failed with HTTP status: $RESPONSE"
-            fi
-      
-            attempt=$((attempt + 1))
-            echo "🔄 Retrying test in $RETRY_DELAY seconds..."
-            sleep $RETRY_DELAY
-          done
-      
-          if [ $success -ne 1 ]; then
-            echo "❌ Test failed after $MAX_RETRIES retries."
-            exit 1
+          else
+              echo "⚠️ Test failed with HTTP status: $HTTP_CODE"
+              cat response.json  # Print error details from API
           fi
-      
