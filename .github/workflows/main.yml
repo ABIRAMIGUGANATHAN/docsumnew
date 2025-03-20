@@ -28,8 +28,8 @@ jobs:
 
       - name: Set Environment from Script
         run: |
-          chmod +x home/runner/work/docsumnew/docker_compose/set_env.sh
-          source home/runner/work/docsumnew/docker_compose/set_env.sh
+          chmod +x ./docker_compose/set_env.sh
+          source ./docker_compose/set_env.sh
 
       - name: Deploy Containers
         run: |
