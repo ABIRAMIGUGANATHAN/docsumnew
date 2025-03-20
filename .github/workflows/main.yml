@@ -43,6 +43,29 @@ jobs:
       - name: Wait for Service to Start
         run: sleep 30
 
+      - name: Check Container Health and Restart if Unhealthy
+        run: |
+          RETRY_COUNT=3
+          COMPOSE_PATH="docker_compose/intel/cpu/xeon/compose.yaml"
+          
+          for i in $(seq 1 $RETRY_COUNT); do
+            HEALTHY_CONTAINERS=$(docker ps --filter "health=healthy" --format "{{.Names}}" | wc -l)
+            TOTAL_CONTAINERS=$(docker compose -f $COMPOSE_PATH ps -q | wc -l)
+            
+            if [ "$HEALTHY_CONTAINERS" -eq "$TOTAL_CONTAINERS" ]; then
+              echo "All containers are healthy. Proceeding..."
+              exit 0
+            fi
+            
+            echo "Some containers are unhealthy. Restarting deployment (Attempt $i)..."
+            docker compose -f $COMPOSE_PATH down
+            docker compose -f $COMPOSE_PATH up -d
+            sleep 30
+          done
+          
+          echo "Containers are still unhealthy after $RETRY_COUNT attempts. Exiting."
+          exit 1
+
   test-document-summarization:
     needs: setup-and-deploy
     runs-on: ubuntu-latest
@@ -56,5 +79,5 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          cd docsumnew/docker_compose/intel/cpu/xeon/
+          cd docker_compose/intel/cpu/xeon/
           docker compose -f compose.yaml down
