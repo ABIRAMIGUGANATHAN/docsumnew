@@ -34,35 +34,44 @@ jobs:
           echo "NO_PROXY=${{ secrets.NO_PROXY }}" >> $GITHUB_ENV
           echo "HUGGINGFACEHUB_API_TOKEN=${{ secrets.HUGGINGFACEHUB_API_TOKEN }}" >> $GITHUB_ENV
 
-      - name: Deploy and Ensure Stability
+      - name: Deploy and Monitor Services
         run: |
           COMPOSE_PATH="docker_compose/intel/cpu/xeon/compose.yaml"
+          MAX_RETRIES=5
+          RETRY_DELAY=20  # Wait 20s before checking health again
+          attempt=0
 
-          restart_count=0
-          max_retries=5  # Increase this if needed
+          # Start the services
+          echo "Starting Docker Compose services..."
+          docker compose -f $COMPOSE_PATH down || true  # Ignore errors
+          docker compose -f $COMPOSE_PATH up -d
 
-          while [ $restart_count -lt $max_retries ]; do
-            echo "Attempt #$((restart_count+1)): Bringing up containers"
+          while [ $attempt -lt $MAX_RETRIES ]; do
+            echo "Checking container health... Attempt #$((attempt+1))"
 
-            docker compose -f $COMPOSE_PATH down || true  # Ignore errors on down
-            docker compose -f $COMPOSE_PATH up -d
+            # Get unhealthy containers
+            UNHEALTHY_CONTAINERS=$(docker ps --filter "status=unhealthy" --format "{{.Names}}")
 
-            echo "Waiting for services to stabilize..."
-            sleep 20  # Initial wait before health check
-
-            unhealthy_containers=$(docker ps --filter "status=unhealthy" --format "{{.Names}}")
-
-            if [ -z "$unhealthy_containers" ]; then
-              echo "All services started successfully!"
+            if [ -z "$UNHEALTHY_CONTAINERS" ]; then
+              echo "✅ All containers are healthy! Proceeding..."
               exit 0
             else
-              echo "Some services are still unhealthy: $unhealthy_containers"
-              docker logs tgi-server || true  # Debug unhealthy container
-              ((restart_count++))
+              echo "❌ Unhealthy containers detected: $UNHEALTHY_CONTAINERS"
+              docker logs tgi-server || true  # Print logs for debugging
+
+              # Restart only unhealthy containers instead of bringing everything down
+              for container in $UNHEALTHY_CONTAINERS; do
+                echo "Restarting $container..."
+                docker restart $container
+              done
             fi
+
+            attempt=$((attempt + 1))
+            echo "Waiting $RETRY_DELAY seconds before rechecking..."
+            sleep $RETRY_DELAY
           done
 
-          echo "ERROR: Services failed to stabilize after $max_retries attempts."
+          echo "❌ ERROR: Services failed to stabilize after $MAX_RETRIES attempts."
           exit 1  # Fail workflow if containers remain unhealthy
 
   test-document-summarization:
