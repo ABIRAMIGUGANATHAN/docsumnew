@@ -30,12 +30,11 @@ jobs:
         run: |
           pwd
           ls -R
-
       - name: Set Environment from Script
         run: |
-          chmod +x ./docker_compose/set_env.sh
-          SOURCE_PATH="docker_compose/set_env.sh"
-          source set_env.sh
+          chmod +x /home/runner/work/docsumnew/docsumnew/docker_compose/set_env.sh
+          . /home/runner/work/docsumnew/docsumnew/docker_compose/set_env.sh
+        shell: bash
 
       - name: Deploy Containers
         run: |
