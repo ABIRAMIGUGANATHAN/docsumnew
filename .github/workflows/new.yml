@@ -1,0 +1,113 @@
+name: OPEA DocSum Automation
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set Environment Variables
+        run: |
+          echo "HOST_IP=${{ secrets.HOST_IP }}" >> $GITHUB_ENV
+          echo "DOCSUM_API=http://${{ secrets.HOST_IP }}:8888/v1/docsum" >> $GITHUB_ENV
+          echo "LLM_MODEL_ID=Intel/neural-chat-7b-v3-3" >> $GITHUB_ENV
+
+      - name: Deploy Services with Docker Compose
+        run: |
+          set +e
+          COMPOSE_PATH="docker_compose/intel/cpu/xeon/compose.yaml"
+          MAX_RETRIES=3
+          RETRY_DELAY=20
+          attempt=0
+          success=0
+
+          while [ $attempt -lt $MAX_RETRIES ]; do
+            echo "🛠️ Starting Docker Compose (Attempt #$((attempt+1)))..."
+            docker compose -f $COMPOSE_PATH down || true
+            docker compose -f $COMPOSE_PATH up -d
+
+            sleep $RETRY_DELAY  # Wait for services to stabilize
+
+            UNHEALTHY_CONTAINERS=$(docker ps --filter "status=unhealthy" --format "{{.Names}}")
+
+            if [ -z "$UNHEALTHY_CONTAINERS" ]; then
+              echo "✅ All containers are healthy!"
+              success=1
+              break
+            else
+              echo "❌ Unhealthy containers detected: $UNHEALTHY_CONTAINERS"
+              docker logs tgi-server || true  # Print logs for debugging
+            fi
+
+            attempt=$((attempt + 1))
+            echo "⏳ Retrying in $RETRY_DELAY seconds..."
+            sleep $RETRY_DELAY
+          done
+
+          if [ $success -ne 1 ]; then
+            echo "❌ ERROR: Services failed after $MAX_RETRIES retries."
+            exit 1
+          fi
+
+  test-docsum:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for API to be Ready
+        run: |
+          echo "⏳ Waiting for API to become available..."
+          MAX_WAIT=60
+          WAIT_INTERVAL=5
+          elapsed=0
+
+          while ! curl --silent --fail $DOCSUM_API -o /dev/null; do
+            echo "⏳ API not ready yet, waiting..."
+            sleep $WAIT_INTERVAL
+            elapsed=$((elapsed + WAIT_INTERVAL))
+            if [ "$elapsed" -ge "$MAX_WAIT" ]; then
+              echo "❌ API failed to start after $MAX_WAIT seconds."
+              exit 1
+            fi
+          done
+          echo "✅ API is now reachable!"
+
+      - name: Run Summarization Test
+        run: |
+          MAX_RETRIES=3
+          RETRY_DELAY=10
+          attempt=0
+          success=0
+
+          while [ $attempt -lt $MAX_RETRIES ]; do
+            echo "📝 Running Summarization Test (Attempt #$((attempt+1)))..."
+            RESPONSE=$(curl -s -o response.json -w "%{http_code}" -X POST $DOCSUM_API \
+                        -H "Content-Type: application/json" \
+                        -d '{"type": "text", "messages": "Text Embeddings Inference is a toolkit for deploying open-source models."}')
+            
+            if [ "$RESPONSE" -eq 200 ]; then
+              echo "✅ Test passed!"
+              success=1
+              break
+            else
+              echo "⚠️ Test failed with HTTP status: $RESPONSE"
+            fi
+
+            attempt=$((attempt + 1))
+            echo "🔄 Retrying test in $RETRY_DELAY seconds..."
+            sleep $RETRY_DELAY
+          done
+
+          if [ $success -ne 1 ]; then
+            echo "❌ Test failed after $MAX_RETRIES retries."
+            exit 1
+          fi
