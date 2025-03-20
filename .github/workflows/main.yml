@@ -25,12 +25,12 @@ jobs:
 
       - name: Set Environment from Script
         run: |
-          chmod +x home/runner/work/docsumnew/docsumnew/docker_compose/set_env.sh
-          source home/runner/work/docsumnew/docsumnew/docker_compose/set_env.sh
+          chmod +x home/runner/work/docsumnew/docker_compose/set_env.sh
+          source home/runner/work/docsumnew/docker_compose/set_env.sh
 
       - name: Deploy Containers
         run: |
-          cd docsum/docker_compose/intel/hpu/gaudi/
+          cd docsumnew/docker_compose/intel/hpu/gaudi/
           docker compose -f compose.yaml up -d
 
       - name: Test DocSum API
