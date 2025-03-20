@@ -18,7 +18,19 @@ jobs:
 
       - name: Set Environment Variables
         run: |
-          source docsumnew/docker_compose/set_env.sh
+          echo "MAX_INPUT_TOKENS=1024" >> $GITHUB_ENV
+          echo "MAX_TOTAL_TOKENS=2048" >> $GITHUB_ENV
+          echo "no_proxy=${{ secrets.NO_PROXY }},${{ secrets.HOST_IP }}" >> $GITHUB_ENV
+          echo "MEGA_SERVICE_HOST_IP=${{ secrets.HOST_IP }}" >> $GITHUB_ENV
+          echo "LLM_SERVICE_HOST_IP=${{ secrets.HOST_IP }}" >> $GITHUB_ENV
+          echo "ASR_SERVICE_HOST_IP=${{ secrets.HOST_IP }}" >> $GITHUB_ENV
+          echo "LLM_MODEL_ID=Intel/neural-chat-7b-v3-3" >> $GITHUB_ENV
+          echo "BACKEND_SERVICE_ENDPOINT=http://${{ secrets.HOST_IP }}:8888/v1/docsum" >> $GITHUB_ENV
+          echo "LLM_ENDPOINT_PORT=8008" >> $GITHUB_ENV
+          echo "DOCSUM_PORT=9000" >> $GITHUB_ENV
+          echo "LLM_ENDPOINT=http://${{ secrets.HOST_IP }}:8008" >> $GITHUB_ENV
+          echo "DocSum_COMPONENT_NAME=OpeaDocSumTgi" >> $GITHUB_ENV
+          source GenAIExamples/DocSum/docker_compose/set_env.sh
           echo "HOST_IP=${{ secrets.HOST_IP }}" >> $GITHUB_ENV
           echo "NO_PROXY=${{ secrets.NO_PROXY }}" >> $GITHUB_ENV
           echo "HUGGINGFACEHUB_API_TOKEN=${{ secrets.HUGGINGFACEHUB_API_TOKEN }}" >> $GITHUB_ENV
