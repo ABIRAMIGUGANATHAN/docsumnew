@@ -1,0 +1,37 @@
+name: Deploy DocSum with Gaudi
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Environment Variables
+        run: |
+          echo "HOST_IP=${{ secrets.HOST_IP }}" >> $GITHUB_ENV
+          echo "NO_PROXY=${{ secrets.NO_PROXY }}" >> $GITHUB_ENV
+          echo "HUGGINGFACEHUB_API_TOKEN=${{ secrets.HUGGINGFACEHUB_API_TOKEN }}" >> $GITHUB_ENV
+
+      - name: Set Environment from Script
+        run: |
+          chmod +x GenAIExamples/DocSum/docker_compose/set_env.sh
+          source GenAIExamples/DocSum/docker_compose/set_env.sh
+
+      - name: Deploy Containers
+        run: |
+          cd GenAIExamples/DocSum/docker_compose/intel/hpu/gaudi/
+          docker compose -f compose.yaml up -d
+
+      - name: Test DocSum API
+        run: |
+          curl -X POST http://${{ env.HOST_IP }}:8888/v1/docsum \
+               -H "Content-Type: application/json" \
+               -d '{"type": "text", "messages": "Text Embeddings Inference (TEI) is a toolkit for deploying and serving open source text embeddings and sequence classification models. TEI enables high-performance extraction for the most popular models, including FlagEmbedding, Ember, GTE and E5."}'
