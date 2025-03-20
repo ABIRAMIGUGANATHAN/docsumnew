@@ -26,6 +26,11 @@ jobs:
       - name: Debug File Existence
         run: ls -lah ./docker_compose/
 
+      - name: Debug Working Directory and File Paths
+        run: |
+          pwd
+          ls -R
+
       - name: Set Environment from Script
         run: |
           chmod +x ./docker_compose/set_env.sh
