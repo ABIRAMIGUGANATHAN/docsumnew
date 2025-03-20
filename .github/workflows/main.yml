@@ -18,18 +18,6 @@ jobs:
 
       - name: Set Environment Variables
         run: |
-          echo "MAX_INPUT_TOKENS=1024" >> $GITHUB_ENV
-          echo "MAX_TOTAL_TOKENS=2048" >> $GITHUB_ENV
-          echo "no_proxy=${{ secrets.NO_PROXY }},${{ secrets.HOST_IP }}" >> $GITHUB_ENV
-          echo "MEGA_SERVICE_HOST_IP=${{ secrets.HOST_IP }}" >> $GITHUB_ENV
-          echo "LLM_SERVICE_HOST_IP=${{ secrets.HOST_IP }}" >> $GITHUB_ENV
-          echo "ASR_SERVICE_HOST_IP=${{ secrets.HOST_IP }}" >> $GITHUB_ENV
-          echo "LLM_MODEL_ID=Intel/neural-chat-7b-v3-3" >> $GITHUB_ENV
-          echo "BACKEND_SERVICE_ENDPOINT=http://${{ secrets.HOST_IP }}:8888/v1/docsum" >> $GITHUB_ENV
-          echo "LLM_ENDPOINT_PORT=8008" >> $GITHUB_ENV
-          echo "DOCSUM_PORT=9000" >> $GITHUB_ENV
-          echo "LLM_ENDPOINT=http://${{ secrets.HOST_IP }}:8008" >> $GITHUB_ENV
-          echo "DocSum_COMPONENT_NAME=OpeaDocSumTgi" >> $GITHUB_ENV
           echo "HOST_IP=${{ secrets.HOST_IP }}" >> $GITHUB_ENV
           echo "NO_PROXY=${{ secrets.NO_PROXY }}" >> $GITHUB_ENV
           echo "HUGGINGFACEHUB_API_TOKEN=${{ secrets.HUGGINGFACEHUB_API_TOKEN }}" >> $GITHUB_ENV
@@ -37,33 +25,22 @@ jobs:
       - name: Deploy Using Docker
         run: |
           COMPOSE_PATH="docker_compose/intel/cpu/xeon/compose.yaml"
-          docker compose -f $COMPOSE_PATH down  # Stop existing containers
-          docker compose -f $COMPOSE_PATH up -d
-
-      - name: Wait for Service to Start
-        run: sleep 30
-
-      - name: Check Container Health and Restart if Unhealthy
-        run: |
-          RETRY_COUNT=3
-          COMPOSE_PATH="docker_compose/intel/cpu/xeon/compose.yaml"
-          
-          for i in $(seq 1 $RETRY_COUNT); do
-            HEALTHY_CONTAINERS=$(docker ps --filter "health=healthy" --format "{{.Names}}" | wc -l)
-            TOTAL_CONTAINERS=$(docker compose -f $COMPOSE_PATH ps -q | wc -l)
-            
-            if [ "$HEALTHY_CONTAINERS" -eq "$TOTAL_CONTAINERS" ]; then
-              echo "All containers are healthy. Proceeding..."
-              exit 0
-            fi
-            
-            echo "Some containers are unhealthy. Restarting deployment (Attempt $i)..."
-            docker compose -f $COMPOSE_PATH down
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            echo "Attempt $((RETRY_COUNT+1)) of $MAX_RETRIES"
+            docker compose -f $COMPOSE_PATH down || true
             docker compose -f $COMPOSE_PATH up -d
             sleep 30
+            if [ "$(docker ps --filter 'health=unhealthy' --format '{{.Names}}')" ]; then
+              echo "Unhealthy containers detected, retrying..."
+              ((RETRY_COUNT++))
+            else
+              echo "All containers are healthy!"
+              exit 0
+            fi
           done
-          
-          echo "Containers are still unhealthy after $RETRY_COUNT attempts. Exiting."
+          echo "Deployment failed after $MAX_RETRIES attempts."
           exit 1
 
   test-document-summarization:
@@ -74,7 +51,7 @@ jobs:
         run: |
           curl -X POST http://${{ env.HOST_IP }}:8888/v1/docsum \
                -H "Content-Type: application/json" \
-               -d '{"type": "text", "messages": "Text Embeddings Inference (TEI) is a toolkit for deploying and serving open source text embeddings and sequence classification models. TEI enables high-performance extraction for the most popular models, including FlagEmbedding, Ember, GTE and E5."}'
+               -d '{"type": "text", "messages": "Text Embeddings Inference (TEI) is a toolkit for deploying and serving open source text embeddings and sequence classification models."}'
 
       - name: Cleanup
         if: always()
