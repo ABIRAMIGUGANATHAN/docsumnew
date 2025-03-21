@@ -7,9 +7,8 @@ jobs:
   deploy-and-test:
     runs-on: ubuntu-latest
     env:
-      LLM_MODEL_ID: Intel/neural-chat-7b-v3-3
-      host_ip: 127.0.0.1
-      no_proxy: "localhost,127.0.0.1"
+      host_ip: ${{ secrets.HOST_IP }}
+      no_proxy: ${{ secrets.NO_PROXY }}
       HUGGINGFACEHUB_API_TOKEN: ${{ secrets.HUGGINGFACEHUB_API_TOKEN }}
 
     steps:
@@ -20,6 +19,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y docker-compose
+          
       - name: Source Env Variables
         working-directory: ./docsum/docker_compose/
         run: |
