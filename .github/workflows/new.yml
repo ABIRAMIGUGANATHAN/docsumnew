@@ -23,9 +23,8 @@ jobs:
           sudo apt-get install -y docker-compose
 
       - name: Deploy DocSum with Docker Compose
-        run: |
-          cd docsumnew/docker_compose/intel/cpu/xeon/
-          docker compose -f compose.yaml up -d
+        working-directory: ./docsumnew/docker_compose/intel/cpu/xeon/
+        run: docker compose -f compose.yaml up -d
 
       - name: Wait for DocSum service to be ready
         run: |
