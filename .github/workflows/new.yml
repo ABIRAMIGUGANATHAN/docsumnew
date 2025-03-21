@@ -23,7 +23,7 @@ jobs:
       - name: Source Env Variables
         working-directory: ./docsum/docker_compose/
         run: |
-          source set_env.sh
+          . set_env.sh
           echo "Environment set."
         shell: bash
 
