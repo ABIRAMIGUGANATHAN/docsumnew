@@ -1,113 +1,58 @@
-name: OPEA DocSum Automation
+name: DocSum End-to-End Automation
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
-  workflow_dispatch:
+  workflow_dispatch:  # Manual trigger, you can add push/pr if needed
 
 jobs:
-  deploy:
+  deploy-and-test:
     runs-on: ubuntu-latest
+    env:
+      LLM_MODEL_ID: Intel/neural-chat-7b-v3-3
+      host_ip: 127.0.0.1
+      HUGGINGFACEHUB_API_TOKEN: ${{ secrets.HUGGINGFACEHUB_API_TOKEN }}
+
     steps:
-      - name: Checkout Repository
+      - name: Checkout Repo
         uses: actions/checkout@v3
 
-      - name: Set Environment Variables
+      - name: Set up Docker
         run: |
-          echo "HOST_IP=${{ secrets.HOST_IP }}" >> $GITHUB_ENV
-          echo "DOCSUM_API=http://${{ secrets.HOST_IP }}:8888/v1/docsum" >> $GITHUB_ENV
-          echo "LLM_MODEL_ID=Intel/neural-chat-7b-v3-3" >> $GITHUB_ENV
+          sudo apt-get update
+          sudo apt-get install -y docker-compose
 
-      - name: Deploy Services with Docker Compose
+      - name: Source Env Variables
         run: |
-          set +e
-          COMPOSE_PATH="docker_compose/intel/cpu/xeon/compose.yaml"
-          MAX_RETRIES=3
-          RETRY_DELAY=20
-          attempt=0
-          success=0
+          source docsumnew/docker_compose/set_env.sh
+          echo "Environment set."
 
-          while [ $attempt -lt $MAX_RETRIES ]; do
-            echo "🛠️ Starting Docker Compose (Attempt #$((attempt+1)))..."
-            docker compose -f $COMPOSE_PATH down || true
-            docker compose -f $COMPOSE_PATH up -d
+      - name: Deploy DocSum with Docker Compose
+        run: |
+          cd docsumnew/docker_compose/intel/cpu/xeon/
+          docker compose -f compose.yaml up -d
 
-            sleep $RETRY_DELAY  # Wait for services to stabilize
-
-            UNHEALTHY_CONTAINERS=$(docker ps --filter "status=unhealthy" --format "{{.Names}}")
-
-            if [ -z "$UNHEALTHY_CONTAINERS" ]; then
-              echo "✅ All containers are healthy!"
-              success=1
+      - name: Wait for DocSum service to be ready
+        run: |
+          for i in {1..30}; do
+            if curl -s http://localhost:8888/v1/docsum; then
+              echo "Service ready"
               break
-            else
-              echo "❌ Unhealthy containers detected: $UNHEALTHY_CONTAINERS"
-              docker logs tgi-server || true  # Print logs for debugging
             fi
-
-            attempt=$((attempt + 1))
-            echo "⏳ Retrying in $RETRY_DELAY seconds..."
-            sleep $RETRY_DELAY
+            echo "Waiting for service..."
+            sleep 5
           done
 
-          if [ $success -ne 1 ]; then
-            echo "❌ ERROR: Services failed after $MAX_RETRIES retries."
-            exit 1
-          fi
-
-  test-docsum:
-    needs: deploy
-    runs-on: ubuntu-latest
-    steps:
-      - name: Wait for API to be Ready
+      - name: Test Summarization Endpoint
         run: |
-          echo "⏳ Waiting for API to become available..."
-          MAX_WAIT=60
-          WAIT_INTERVAL=5
-          elapsed=0
+          curl -X POST http://localhost:8888/v1/docsum \
+            -H "Content-Type: application/json" \
+            -d '{"type": "text", "messages": "Text Embeddings Inference (TEI) is a toolkit for deploying and serving open source text embeddings and sequence classification models."}' \
+            -o result.json -s -w "\nStatus Code: %{http_code}\n"
 
-          while ! curl --silent --fail $DOCSUM_API -o /dev/null; do
-            echo "⏳ API not ready yet, waiting..."
-            sleep $WAIT_INTERVAL
-            elapsed=$((elapsed + WAIT_INTERVAL))
-            if [ "$elapsed" -ge "$MAX_WAIT" ]; then
-              echo "❌ API failed to start after $MAX_WAIT seconds."
-              exit 1
-            fi
-          done
-          echo "✅ API is now reachable!"
+          echo "Summary Output:"
+          cat result.json
 
-      - name: Run Summarization Test
+      - name: Tear Down Docker Containers
+        if: always()
         run: |
-          MAX_RETRIES=3
-          RETRY_DELAY=10
-          attempt=0
-          success=0
-
-          while [ $attempt -lt $MAX_RETRIES ]; do
-            echo "📝 Running Summarization Test (Attempt #$((attempt+1)))..."
-            RESPONSE=$(curl -s -o response.json -w "%{http_code}" -X POST $DOCSUM_API \
-                        -H "Content-Type: application/json" \
-                        -d '{"type": "text", "messages": "Text Embeddings Inference is a toolkit for deploying open-source models."}')
-            
-            if [ "$RESPONSE" -eq 200 ]; then
-              echo "✅ Test passed!"
-              success=1
-              break
-            else
-              echo "⚠️ Test failed with HTTP status: $RESPONSE"
-            fi
-
-            attempt=$((attempt + 1))
-            echo "🔄 Retrying test in $RETRY_DELAY seconds..."
-            sleep $RETRY_DELAY
-          done
-
-          if [ $success -ne 1 ]; then
-            echo "❌ Test failed after $MAX_RETRIES retries."
-            exit 1
-          fi
+          cd docsumnew/docker_compose/intel/cpu/xeon/
+          docker compose -f compose.yaml down
