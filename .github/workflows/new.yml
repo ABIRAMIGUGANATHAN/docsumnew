@@ -30,7 +30,7 @@ jobs:
           find . -type f -name "compose.yaml"
 
       - name: Deploy DocSum with Docker Compose
-        working-directory: ./docsumnew/docker_compose/intel/cpu/xeon/
+        working-directory: ./docker_compose/intel/cpu/xeon/
         run: docker compose -f compose.yaml up -d
 
       - name: Wait for DocSum service to be ready
