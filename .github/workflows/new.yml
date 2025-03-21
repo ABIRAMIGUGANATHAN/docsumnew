@@ -21,7 +21,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y docker-compose
       - name: Source Env Variables
-        working-directory: ./docker_compose/
+        working-directory: ./docsum/docker_compose/
         run: |
           source set_env.sh
           echo "Environment set."
@@ -35,7 +35,7 @@ jobs:
           find . -type f -name "compose.yaml"
 
       - name: Deploy DocSum with Docker Compose
-        working-directory: ./docker_compose/intel/cpu/xeon/
+        working-directory: ./docsum/docker_compose/intel/cpu/xeon/
         run: docker compose -f compose.yaml up -d
 
       - name: Wait for DocSum service to be ready
