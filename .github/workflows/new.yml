@@ -65,7 +65,7 @@ jobs:
           find . -name compose.yaml
 
       - name: Start Docker Compose
-        working-directory: /docsum/docker_compose/intel/cpu/xeon/
+        working-directory: ./docsum/docker_compose/intel/cpu/xeon/
         run: docker compose -f compose.yaml up -d
 
       - name: Wait for DocSum service to be ready
