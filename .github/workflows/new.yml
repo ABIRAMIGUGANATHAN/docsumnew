@@ -1,116 +1,42 @@
-name: DocSum Deployment - Docker
-run-name: Deploy DocSum on ${{ github.event.inputs.RUNNER_NAME }} in ${{ github.event.inputs.DEPLOY_TYPE }} mode
+name: Deploy and Test Document Summarization Service
 
 on:
   workflow_dispatch:
-    inputs:
-      RUNNER_NAME:
-        description: 'GitHub Runner name'
-        required: true
-        default: 'ubuntu-latest'
-      DEPLOY_TYPE:
-        description: 'Deployment type (CPU/GPU)'
-        required: true
-        default: 'cpu'
-        type: choice
-        options:
-          - cpu
-          - gpu
-      IMAGE_OPTION:
-        description: 'Choose image option'
-        required: true
-        default: 'default'
-        type: choice
-        options:
-          - default
-          - build
-          - pull_from_caas
-      MODEL:
-        description: 'Model Name'
-        required: true
-        default: 'default-model'
-      SERVICE_TIMEOUT:
-        description: 'Wait time for service readiness (in seconds)'
-        required: true
-        default: '150'
-        type: number
 
 jobs:
-  environment_setup:
-    runs-on: ${{ github.event.inputs.RUNNER_NAME }}
+  deploy-docsum:
+    runs-on: ubuntu-latest
+
+    env:
+      LLM_MODEL_ID: "Intel/neural-chat-7b-v3-3"
+      host_ip: "192.168.2.209"
+      no_proxy: "localhost,127.0.0.1,192.168.2.209"
+      HUGGINGFACEHUB_API_TOKEN: ${{ secrets.HUGGINGFACEHUB_API_TOKEN }}
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-      - name: Install Docker Compose
+      - name: Set environment variables
         run: |
-          sudo apt-get update
-          sudo apt-get install -y docker-compose
+          echo "LLM_MODEL_ID=${{ env.LLM_MODEL_ID }}" >> $GITHUB_ENV
+          echo "host_ip=${{ env.host_ip }}" >> $GITHUB_ENV
+          echo "no_proxy=${{ env.no_proxy }}" >> $GITHUB_ENV
+          echo "HUGGINGFACEHUB_API_TOKEN=${{ env.HUGGINGFACEHUB_API_TOKEN }}" >> $GITHUB_ENV
 
-      - name: Source Environment Variables
-        working-directory: ./docsum/docker_compose/
+      - name: Source additional environment setup
+        run: source docsumnew/docsum/docker_compose/set_env.sh
+
+      - name: Deploy Document Summarization on Xeon
         run: |
-          . ./set_env.sh
-          echo "Environment variables sourced."
+          cd docsumnew/docsum/docker_compose/intel/cpu/xeon/
+          docker compose -f compose.yaml up -d
 
-  deploy_service:
-    needs: environment_setup
-    runs-on: ${{ github.event.inputs.RUNNER_NAME }}
+      - name: Wait for service to start
+        run: sleep 60
 
-    steps:
-      - name: Debug directory & file structure
+      - name: Test DocSum with cURL
         run: |
-          pwd && ls -al
-          find . -name compose.yaml
-
-      - name: Start Docker Compose
-        working-directory: ./docker_compose/intel/cpu/xeon/
-        run: docker compose -f compose.yaml up -d
-
-      - name: Wait for DocSum service to be ready
-        run: |
-          for i in $(seq 1 $(( ${{ github.event.inputs.SERVICE_TIMEOUT }} / 5 ))); do
-            if curl -s http://localhost:8888/v1/docsum; then
-              echo "DocSum service is ready."
-              exit 0
-            fi
-            echo "Waiting for service..."
-            sleep 5
-          done
-          echo "Timeout: DocSum service did not become ready in time."
-          exit 1
-
-  validate_service:
-    needs: deploy_service
-    runs-on: ${{ github.event.inputs.RUNNER_NAME }}
-
-    steps:
-      - name: Call DocSum Summarization Endpoint
-        run: |
-          curl -X POST http://localhost:8888/v1/docsum \
-            -H "Content-Type: application/json" \
-            -d '{"type": "text", "messages": "Text Embeddings Inference (TEI) is a toolkit for deploying and serving open source text embeddings and sequence classification models."}' \
-            -o result.json -s -w "\nStatus Code: %{http_code}\n"
-          echo "Summary Output:"
-          cat result.json
-
-      - name: Upload Result as Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: docsum-test-result
-          path: result.json
-
-  cleanup:
-    needs: validate_service
-    runs-on: ${{ github.event.inputs.RUNNER_NAME }}
-    if: always()
-
-    steps:
-      - name: Tear Down Docker Containers
-        run: |
-          cd docsum/docker_compose/intel/cpu/xeon/
-          docker compose -f compose.yaml down
-
-      - name: Remove Dangling Images
-        run: echo y | sudo docker system prune
+          curl -X POST http://${{ env.host_ip }}:8888/v1/docsum \
+               -H "Content-Type: application/json" \
+               -d '{"type": "text", "messages": "Text Embeddings Inference (TEI) is a toolkit for deploying and serving open source text embeddings and sequence classification models. TEI enables high-performance extraction for the most popular models, including FlagEmbedding, Ember, GTE and E5."}'
