@@ -24,10 +24,10 @@ jobs:
           echo "no_proxy=${{ env.no_proxy }}" >> $GITHUB_ENV
           echo "HUGGINGFACEHUB_API_TOKEN=${{ env.HUGGINGFACEHUB_API_TOKEN }}" >> $GITHUB_ENV
 
-      - name: Deploy Document Summarization on Xeon
+      - name: Docker Compose Up
         run: |
           COMPOSE_PATH="docsum/docker_compose/intel/cpu/xeon/compose.yaml"
-          docker compose up -d
+          docker compose -f $COMPOSE_PATH up -d
 
       - name: Wait for service to start
         run: sleep 60
