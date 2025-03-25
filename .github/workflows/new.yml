@@ -1,39 +1,50 @@
-name: Deploy and Test Document Summarization Service
+name: Deploy_ChatQnA
 
 on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
-  deploy-docsum:
+  deploy:
     runs-on: ubuntu-latest
-
-    env:
-      LLM_MODEL_ID: "Intel/neural-chat-7b-v3-3"
-      host_ip: "192.168.2.209"
-      no_proxy: "localhost,127.0.0.1,192.168.2.209"
-      HUGGINGFACEHUB_API_TOKEN: ${{ secrets.HUGGINGFACEHUB_API_TOKEN }}
-
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v3
 
-      - name: Set environment variables
+      - name: Set up Environment Variables
         run: |
-          echo "LLM_MODEL_ID=${{ env.LLM_MODEL_ID }}" >> $GITHUB_ENV
-          echo "host_ip=${{ env.host_ip }}" >> $GITHUB_ENV
-          echo "no_proxy=${{ env.no_proxy }}" >> $GITHUB_ENV
-          echo "HUGGINGFACEHUB_API_TOKEN=${{ env.HUGGINGFACEHUB_API_TOKEN }}" >> $GITHUB_ENV
+          echo "HOST_IP=${{ secrets.HOST_IP }}" >> $GITHUB_ENV
+          echo "NO_PROXY=${{ secrets.NO_PROXY }}" >> $GITHUB_ENV
+          echo "HUGGINGFACEHUB_API_TOKEN=${{ secrets.HUGGINGFACEHUB_API_TOKEN }}" >> $GITHUB_ENV
 
-      - name: Docker Compose Up
+      - name: Install Dependencies
         run: |
-          COMPOSE_PATH="docsum/docker_compose/intel/cpu/xeon/compose.yaml"
-          docker compose -f $COMPOSE_PATH up -d
+          sudo apt update
+          sudo apt install -y docker.io docker-compose
 
-      - name: Wait for service to start
-        run: sleep 60
-
-      - name: Test DocSum with cURL
+      - name: Run ChatQnA Setup Script
         run: |
-          curl -X POST http://${{ env.host_ip }}:8888/v1/docsum \
-               -H "Content-Type: application/json" \
-               -d '{"type": "text", "messages": "Text Embeddings Inference (TEI) is a toolkit for deploying and serving open source text embeddings and sequence classification models. TEI enables high-performance extraction for the most popular models, including FlagEmbedding, Ember, GTE and E5."}'
+          cd GenAIExamples/ChatQnA/docker_compose/intel/cpu/xeon/
+          source ./set_env.sh
+
+      - name: Start Docker Compose
+        run: |
+          cd GenAIExamples/ChatQnA/docker_compose/intel/cpu/xeon/
+          docker compose up -d
+
+      - name: Verify Deployment
+        run: |
+          sleep 30
+          curl -X POST "http://${{ env.HOST_IP }}:8888/v1/chatqna" \
+            -H "Content-Type: application/json" \
+            -d '{"messages": "Test deployment success?"}'
+
+      - name: Check Logs (If Deployment Fails)
+        if: failure()
+        run: |
+          docker logs chatqna-xeon-backend-server
