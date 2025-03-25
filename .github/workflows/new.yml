@@ -24,12 +24,12 @@ jobs:
 
       - name: Run ChatQnA Setup Script
         run: |
-          cd GenAIExamples/ChatQnA/docker_compose/intel/cpu/xeon/
+          cd docsum/docker_compose/
           source ./set_env.sh
 
       - name: Start Docker Compose
         run: |
-          cd GenAIExamples/ChatQnA/docker_compose/intel/cpu/xeon/
+          cd docsum/docker_compose/intel/cpu/xeon/
           docker compose up -d
 
       - name: Verify Deployment
