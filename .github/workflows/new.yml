@@ -24,9 +24,6 @@ jobs:
           echo "no_proxy=${{ env.no_proxy }}" >> $GITHUB_ENV
           echo "HUGGINGFACEHUB_API_TOKEN=${{ env.HUGGINGFACEHUB_API_TOKEN }}" >> $GITHUB_ENV
 
-      - name: Source additional environment setup
-        run: source docsumnew/docsum/docker_compose/set_env.sh
-
       - name: Deploy Document Summarization on Xeon
         run: |
           cd docsumnew/docsum/docker_compose/intel/cpu/xeon/
