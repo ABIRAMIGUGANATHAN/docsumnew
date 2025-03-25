@@ -26,7 +26,7 @@ jobs:
 
       - name: Deploy Document Summarization on Xeon
         run: |
-          COMPOSE_PATH="docsum/ocker_compose/intel/cpu/xeon/compose.yaml"
+          COMPOSE_PATH="docsum/docker_compose/intel/cpu/xeon/compose.yaml"
           docker compose -f compose.yaml up -d
 
       - name: Wait for service to start
